@@ -70,41 +70,45 @@ if __name__ == "__main__":
             incr = 0
         if message[1] == attacked_id and float(message[0]) >= attack_start_time:
             if len(message[4:]) >= args.offset + args.width:
+
                 if args.attack_type == 'const':
-                    message[4:] = [
-                        "{:02x}".format(args.attack_data) if args.offset <= index < args.offset + args.width else byte
-                        for index, byte in enumerate(message[4:])]
+                    message[4:] = ["{:02x}".format(args.attack_data)
+                                   if args.offset <= index < args.offset + args.width
+                                   else byte for index, byte in enumerate(message[4:])]
+
                 if args.attack_type == 'delta':
-                    message[4:] = ["{:02x}".format(
-                        int(byte, 16) + args.attack_data) if args.offset <= index < args.offset + args.width and int(
-                        byte, 16) + args.attack_data <= 255 else byte for index, byte in enumerate(message[4:])]
+                    message[4:] = ["{:02x}".format(int(byte, 16) + args.attack_data)
+                                   if args.offset <= index < args.offset + args.width and
+                                   int(byte, 16) + args.attack_data <= 255
+                                   else byte for index, byte in enumerate(message[4:])]
+
                 if args.attack_type == 'random':
-                    message[4:] = ["{:02x}".format(
-                        random.randint(0, 255)) if args.offset <= index < args.offset + args.width else byte for
-                                   index, byte in enumerate(message[4:])]
+                    message[4:] = ["{:02x}".format(random.randint(0, 255))
+                                   if args.offset <= index < args.offset + args.width
+                                   else byte for index, byte in enumerate(message[4:])]
+
                 if args.attack_type == 'add_incr':
                     incr += 1
-                    message[4:] = ["{:02x}".format(
-                        int(byte, 16) + incr) if args.offset <= index < args.offset + args.width and int(byte,
-                                                                                                         16) + incr <= 255 else byte
-                                   for index, byte in enumerate(message[4:])]
+                    message[4:] = ["{:02x}".format(int(byte, 16) + incr)
+                                   if args.offset <= index < args.offset + args.width and int(byte,16) + incr <= 255
+                                   else byte for index, byte in enumerate(message[4:])]
 
                 if args.attack_type == 'add_decr':
                     incr += 1
-                    message[4:] = ["{:02x}".format(
-                        int(byte, 16) - incr) if args.offset <= index < args.offset + args.width and int(byte,
-                                                                                                         16) - incr >= 0 else byte
-                                   for index, byte in enumerate(message[4:])]
+                    message[4:] = ["{:02x}".format(int(byte, 16) - incr)
+                                   if args.offset <= index < args.offset + args.width and int(byte,16) - incr >= 0
+                                   else byte for index, byte in enumerate(message[4:])]
 
                 if args.attack_type == 'change_incr':
-                    message[4:] = ["{:02x}".format(incr) if args.offset <= index < args.offset + args.width else byte
-                                   for index, byte in enumerate(message[4:])]
+                    message[4:] = ["{:02x}".format(incr)
+                                   if args.offset <= index < args.offset + args.width
+                                   else byte for index, byte in enumerate(message[4:])]
                     incr += 1
 
                 if args.attack_type == 'change_decr':
-                    message[4:] = [
-                        "{:02x} ".format(255 - incr) if args.offset <= index < args.offset + args.width else byte for
-                        index, byte in enumerate(message[4:])]
+                    message[4:] = ["{:02x} ".format(255 - incr)
+                                   if args.offset <= index < args.offset + args.width
+                                   else byte for index, byte in enumerate(message[4:])]
                     incr += 1
             else:
                 raise ValueError("There are no selected bytes for given attacked_id, offset and width.")
