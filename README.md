@@ -1,12 +1,12 @@
 # can-log-infector
 
-A python script to generate infected CAN logs by modifying to original messages.
+A python script to generate infected CAN logs by modifying the original messages.
+
+## Description
 
 ## Goal
 
-The goal of this project is to allow researchers to create malicious can data for research purposes only, eg. for evaluation of intrusion detection mechanisms.
-
-## Description
+The goal of this project is to allow researchers to create malicious can data for research purposes only, eg. for evaluation of intrusion detection mechanisms. This project is part of the [CrySyS Vehicle Security Research](https://www.crysys.hu/research/vehicle-security).
 
 ### Functions
 The implemented attack types can change the CAN data field in 7 different ways:
@@ -33,15 +33,15 @@ where
 * data: the data part of the can message
 
 ## Usage
- Run the corr_attack_generator.py from the src/corr_attack_generator folder with the necessary arguments:
+Run the corr_attack_generator.py from the src/corr_attack_generator folder with the necessary arguments:
 
-    1. -if / --input_file
-    2. -at / --attack_type: choices: const, random, delta, add_incr, add_decr, change_incr or change_decr
-    3. -ad / --attack_data (if const or delta attack_type)
-    4. -ai / --attacked_id: **in decimal form**
-    5. -o / --offset: data offset
-    6. -w / --width: data width 
-    7. -st / --start_time: float, given in percent
+1. -if   / --input_file
+2. -at   / --attack_type:  choices: const, random, delta, add_incr, add_decr, change_incr or change_decr
+3. -ad   / --attack_data:  (if const or delta attack_type)
+4. -ai   / --attacked_id:  in hexadecimal form without the '0x'prefix
+5. -o    / --offset:       data offset
+6. -w    / --width:        data width 
+7. -st   / --start_time:   float, given in percent
     
- ## License
- This work is shared under the GNU LGPLv3 license. (See LICENSE.txt)
+## License
+This work is shared under the GNU LGPLv3 license. (See LICENSE.txt)
