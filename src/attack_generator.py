@@ -1,5 +1,6 @@
 from argparse import ArgumentParser
 import random
+import sys
 
 
 def get_formatted_data(data):
@@ -14,6 +15,36 @@ def get_formatted_data(data):
             string_data += " " + hex_num
 
     return string_data
+
+
+def replace_data_with_attacked_data(attack_type, attack_data, attack_offset, attack_width, message_data, dlc):
+    mask_offset = dlc * 8 - attack_offset
+    original_number = int("".join(message_data), 16)
+
+    # mask calculations
+    mask = ((1 << attack_width)-1)
+    mask_at_offset = ~(((1 << attack_width)-1) << (mask_offset - attack_width))
+
+    # extract the original value
+    original_value = (original_number >> (mask_offset - attack_width)) & mask
+
+    if attack_type == 'delta' or attack_type == 'add_incr' or attack_type == 'add_decr':
+        attack_value = attack_data + original_value
+    elif attack_type == 'random':
+        attack_value = random.randint(0, 255)
+    else:
+        attack_value = attack_data
+
+    # add attacked value at the correct location
+    attacked_value = hex(original_target_removed | (
+        attack_value << (mask_offset-attack_width)))
+
+    # restore value to the array
+    if len(attacked_value) % 2 == 1:
+        attacked_value = "0" + attacked_value
+
+    message_data = [attacked_value[i:i+2]
+                    for i in range(0, len(attacked_value), 2)]
 
 
 if __name__ == "__main__":
@@ -49,21 +80,25 @@ if __name__ == "__main__":
 
     if args.attack_type in ['const', 'delta'] and (
             not args.attack_data or args.attack_data < 0 or args.attack_data > 255):
-        parser.error("const and delta attack types require an attack data integer between 0 and 255")
+        parser.error(
+            "const and delta attack types require an attack data integer between 0 and 255")
 
-    attacked_id = "{:04x}".format(args.attacked_id)
+    attacked_id = "{:04x}".format(int(args.attacked_id, 16))
 
     messages = []
     incr = 0
 
     with open(args.input_file) as file:
         for row in file:
+            if not row:
+                continue  # skip empty lines
             row_split = row.split(' ')
             row_split = [x.rstrip() for x in row_split if x != '']
             messages.append(row_split)
 
     log_duration = float(messages[-1][0]) - float(messages[0][0])
-    attack_start_time = int(float(messages[0][0]) + log_duration * args.start_time)
+    attack_start_time = int(
+        float(messages[0][0]) + log_duration * args.start_time)
 
     for message in messages:
         if incr == 255:
@@ -71,47 +106,44 @@ if __name__ == "__main__":
         if message[1] == attacked_id and float(message[0]) >= attack_start_time:
             if len(message[4:]) >= args.offset + args.width:
 
-                if args.attack_type == 'const':
-                    message[4:] = ["{:02x}".format(args.attack_data)
-                                   if args.offset <= index < args.offset + args.width
-                                   else byte for index, byte in enumerate(message[4:])]
-
                 if args.attack_type == 'delta':
-                    message[4:] = ["{:02x}".format(int(byte, 16) + args.attack_data)
-                                   if args.offset <= index < args.offset + args.width and
-                                   int(byte, 16) + args.attack_data <= 255
-                                   else byte for index, byte in enumerate(message[4:])]
+                    replace_data_with_attacked_data(args.attack_type, args.attack_data, args.attack_offset,
+                                                    args.attack_width, message[4:], message[3])
 
-                if args.attack_type == 'random':
-                    message[4:] = ["{:02x}".format(random.randint(0, 255))
-                                   if args.offset <= index < args.offset + args.width
-                                   else byte for index, byte in enumerate(message[4:])]
-
-                if args.attack_type == 'add_incr':
+                elif args.attack_type == 'add_incr':
                     incr += 1
-                    message[4:] = ["{:02x}".format(int(byte, 16) + incr)
-                                   if args.offset <= index < args.offset + args.width and int(byte,16) + incr <= 255
-                                   else byte for index, byte in enumerate(message[4:])]
+                    replace_data_with_attacked_data(args.attack_type, incr, args.attack_offset,
+                                                    args.attack_width, message[4:], message[3])
 
-                if args.attack_type == 'add_decr':
+                elif args.attack_type == 'add_decr':
                     incr += 1
-                    message[4:] = ["{:02x}".format(int(byte, 16) - incr)
-                                   if args.offset <= index < args.offset + args.width and int(byte,16) - incr >= 0
-                                   else byte for index, byte in enumerate(message[4:])]
+                    replace_data_with_attacked_data(args.attack_type, -1 * incr, args.attack_offset,
+                                                    args.attack_width, message[4:], message[3])
 
-                if args.attack_type == 'change_incr':
-                    message[4:] = ["{:02x}".format(incr)
-                                   if args.offset <= index < args.offset + args.width
-                                   else byte for index, byte in enumerate(message[4:])]
+                elif args.attack_type == 'random':
+                    replace_data_with_attacked_data(args.attack_type, args.attack_data, args.attack_offset,
+                                                    args.attack_width, message[4:], message[3])
+
+                elif args.attack_type == 'const':
+                    replace_data_with_attacked_data(args.attack_type, args.attack_data, args.attack_offset,
+                                                    args.attack_width, message[4:], message[3])
+
+                elif args.attack_type == 'change_incr':
+                    replace_data_with_attacked_data(args.attack_type, incr, args.attack_offset,
+                                                    args.attack_width, message[4:], message[3])
                     incr += 1
 
-                if args.attack_type == 'change_decr':
-                    message[4:] = ["{:02x} ".format(255 - incr)
-                                   if args.offset <= index < args.offset + args.width
-                                   else byte for index, byte in enumerate(message[4:])]
+                elif args.attack_type == 'change_decr':
+                    replace_data_with_attacked_data(args.attack_type, 255 - incr, args.attack_offset,
+                                                    args.attack_width, message[4:], message[3])
                     incr += 1
+
+                else:
+                    raise ValueError("Unknown attack type.")
+
             else:
-                raise ValueError("There are no selected bytes for given attacked_id, offset and width.")
+                raise ValueError(
+                    "There are no selected bytes for given attacked_id, offset and width.")
 
     with open(
             args.attack_type + "-" + str(args.attacked_id) + "-" + str(args.offset) + "-" + str(args.width) + "-" + str(
