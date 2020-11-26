@@ -1,4 +1,4 @@
-# can-log-infector
+# CAN data infector
 
 A python script to generate infected CAN logs by modifying the original messages.
 
