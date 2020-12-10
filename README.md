@@ -42,6 +42,7 @@ Run the corr_attack_generator.py from the src/corr_attack_generator folder with 
 5. -o    / --offset:       data offset
 6. -w    / --width:        data width 
 7. -st   / --start_time:   float, given in percent
+8. -et   / --end_time:     float, given in percent
     
 ## License
 This work is shared under the GNU LGPLv3 license. (See LICENSE.txt)

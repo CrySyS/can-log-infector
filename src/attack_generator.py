@@ -1,6 +1,5 @@
 from argparse import ArgumentParser
 import random
-import sys
 
 
 def get_formatted_data(data):
@@ -17,34 +16,38 @@ def get_formatted_data(data):
     return string_data
 
 
-def replace_data_with_attacked_data(attack_type, attack_data, attack_offset, attack_width, message_data, dlc):
-    mask_offset = dlc * 8 - attack_offset
-    original_number = int("".join(message_data), 16)
+def get_attacked_data(attack_type, attack_data, attack_offset, attack_width, message_data, dlc):
+    # get original data in binary format and
+    # separate it to start, attack and end parts according to given attack_offset and attack_width
+    original_data = "".join(["{0:08b}".format(int(byte, 16)) for byte in message_data])
+    start, attack, end = original_data[:attack_offset], original_data[
+                                                        attack_offset:attack_offset + attack_width], original_data[
+                                                                                                     attack_offset + attack_width:]
+    if len(attack) == 0:
+        raise ValueError("there are no selected attack bits (width = 0?)")
 
-    # mask calculations
-    mask = ((1 << attack_width)-1)
-    mask_at_offset = ~(((1 << attack_width)-1) << (mask_offset - attack_width))
-
-    # extract the original value
-    original_value = (original_number >> (mask_offset - attack_width)) & mask
-
-    if attack_type == 'delta' or attack_type == 'add_incr' or attack_type == 'add_decr':
-        attack_value = attack_data + original_value
+    original_attack_value = int(attack, 2)
+    # for delta and add_incr attack types, if the resulting value is bigger than the
+    # maximum value (for given attack_width), the modified value will be the maximum value
+    if attack_type == 'delta' or attack_type == 'add_incr':
+        attack_value = min(attack_data + original_attack_value, 2 ** attack_width - 1)
+    # for add_decr attack type, if the resulting value is lesser than zero, the modified value
+    # will be zero
+    elif attack_type == 'add_decr':
+        attack_value = max(attack_data + original_attack_value, 0)
     elif attack_type == 'random':
-        attack_value = random.randint(0, 255)
+        attack_value = random.randint(0, 2 ** attack_width - 1)
     else:
         attack_value = attack_data
 
-    # add attacked value at the correct location
-    attacked_value = hex(original_target_removed | (
-        attack_value << (mask_offset-attack_width)))
+    # convert the modified value to binary format, and fill with leading zeros, until it matches
+    # the length of the original value
+    stuffed_attack = str("{0:b}".format(attack_value)).zfill(attack_width)
 
-    # restore value to the array
-    if len(attacked_value) % 2 == 1:
-        attacked_value = "0" + attacked_value
+    modified_data = start + stuffed_attack + end
 
-    message_data = [attacked_value[i:i+2]
-                    for i in range(0, len(attacked_value), 2)]
+    # return two hexadecimal values for each 8 bit segment
+    return ["{:02x}".format(int(modified_data[i * 8:(i * 8) + 8], 2)) for i in range(0, int(dlc))]
 
 
 if __name__ == "__main__":
@@ -67,23 +70,29 @@ if __name__ == "__main__":
                             --offset : the offset of the bytes in the message to attack
                             --width : the length of the bytes in the message to attack
                             --start_time : a value between 0 and 1: the ratio when the attack should start regarding the full
+                                length of the capture
+                            --end_time : a value between 0 and 1: the ratio when the attack should end regarding the full
                                 length of the capture""")
     parser.add_argument('-if', '--input_file', type=str, required=True)
     parser.add_argument('-at', '--attack_type', type=str, choices=['const', 'random', 'delta', 'add_incr', 'add_decr',
                                                                    'change_incr', 'change_decr'], required=True)
     parser.add_argument('-ad', '--attack_data', type=int)
-    parser.add_argument('-ai', '--attacked_id', type=int, required=True)
-    parser.add_argument('-o', '--offset', type=int, required=True)
-    parser.add_argument('-w', '--width', type=int, required=True)
+    parser.add_argument('-ai', '--attacked_id', type=str, required=True)
+    parser.add_argument('-o', '--attack_offset', type=int, required=True)
+    parser.add_argument('-w', '--attack_width', type=int, required=True)
     parser.add_argument('-st', '--start_time', type=float, required=True)
+    parser.add_argument('-et', '--end_time', type=float, required=True)
     args = parser.parse_args()
 
-    if args.attack_type in ['const', 'delta'] and (
-            not args.attack_data or args.attack_data < 0 or args.attack_data > 255):
+    if args.attack_type in ['const', 'delta'] and not args.attack_data:
         parser.error(
-            "const and delta attack types require an attack data integer between 0 and 255")
+            "const and delta attack types require an attack data")
 
-    attacked_id = "{:04x}".format(int(args.attacked_id, 16))
+    if args.end_time <= args.start_time:
+        parser.error("attack end time must be greater than start time")
+
+    if args.attack_data and (args.attack_data > 2 ** args.attack_width - 1 or args.attack_data < 0):
+        parser.error("attack data is too large ( > (2^attack_width) - 1) or below zero for given attack width")
 
     messages = []
     incr = 0
@@ -97,44 +106,47 @@ if __name__ == "__main__":
             messages.append(row_split)
 
     log_duration = float(messages[-1][0]) - float(messages[0][0])
-    attack_start_time = int(
-        float(messages[0][0]) + log_duration * args.start_time)
+    attack_start_time = int(float(messages[0][0]) + log_duration * args.start_time)
+    attack_end_time = int(float(messages[0][0]) + log_duration * args.end_time)
 
     for message in messages:
-        if incr == 255:
+        if incr == 2 ** args.attack_width - 1:
             incr = 0
-        if message[1] == attacked_id and float(message[0]) >= attack_start_time:
-            if len(message[4:]) >= args.offset + args.width:
-
+        if message[1] == args.attacked_id and attack_start_time <= float(message[0]) <= attack_end_time:
+            if len(message[4:]) * 8 >= args.attack_offset + args.attack_width:
                 if args.attack_type == 'delta':
-                    replace_data_with_attacked_data(args.attack_type, args.attack_data, args.attack_offset,
+                    message[4:] = get_attacked_data(args.attack_type, args.attack_data,
+                                                    args.attack_offset,
                                                     args.attack_width, message[4:], message[3])
 
                 elif args.attack_type == 'add_incr':
                     incr += 1
-                    replace_data_with_attacked_data(args.attack_type, incr, args.attack_offset,
+                    message[4:] = get_attacked_data(args.attack_type, incr, args.attack_offset,
                                                     args.attack_width, message[4:], message[3])
 
                 elif args.attack_type == 'add_decr':
                     incr += 1
-                    replace_data_with_attacked_data(args.attack_type, -1 * incr, args.attack_offset,
+                    message[4:] = get_attacked_data(args.attack_type, -1 * incr, args.attack_offset,
                                                     args.attack_width, message[4:], message[3])
 
                 elif args.attack_type == 'random':
-                    replace_data_with_attacked_data(args.attack_type, args.attack_data, args.attack_offset,
+                    message[4:] = get_attacked_data(args.attack_type, args.attack_data,
+                                                    args.attack_offset,
                                                     args.attack_width, message[4:], message[3])
 
                 elif args.attack_type == 'const':
-                    replace_data_with_attacked_data(args.attack_type, args.attack_data, args.attack_offset,
+                    message[4:] = get_attacked_data(args.attack_type, args.attack_data,
+                                                    args.attack_offset,
                                                     args.attack_width, message[4:], message[3])
 
                 elif args.attack_type == 'change_incr':
-                    replace_data_with_attacked_data(args.attack_type, incr, args.attack_offset,
+                    message[4:] = get_attacked_data(args.attack_type, incr, args.attack_offset,
                                                     args.attack_width, message[4:], message[3])
                     incr += 1
 
                 elif args.attack_type == 'change_decr':
-                    replace_data_with_attacked_data(args.attack_type, 255 - incr, args.attack_offset,
+                    message[4:] = get_attacked_data(args.attack_type, 2 ** args.attack_width - 1 - incr,
+                                                    args.attack_offset,
                                                     args.attack_width, message[4:], message[3])
                     incr += 1
 
@@ -143,11 +155,11 @@ if __name__ == "__main__":
 
             else:
                 raise ValueError(
-                    "There are no selected bytes for given attacked_id, offset and width.")
+                    "There are no selected bits for given attacked_id, offset and width.")
 
     with open(
-            args.attack_type + "-" + str(args.attacked_id) + "-" + str(args.offset) + "-" + str(args.width) + "-" + str(
-                args.start_time) + ".csv", 'w') as out_file:
+            f"{args.attack_type}-{args.attacked_id}-{args.attack_offset}-{args.attack_width}-{args.start_time}-{args.end_time}.csv",
+            "w") as out_file:
         for message in messages:
             out_file.write(message[0] + "        ")
             out_file.write(message[1] + "    ")
